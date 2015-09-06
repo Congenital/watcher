@@ -26,7 +26,7 @@ func main() {
 
 	watcher.SetHandle(syscall.SIGINT, func() {
 		log.Info("SIGINT")
-		watcher.Exit()
+		watcher.Exit(0)
 	})
 
 	watcher.GetExitCode()

@@ -140,9 +140,10 @@ func Handle(_signal os.Signal) {
 	log.Info("Handle")
 
 	list_lock.RLock()
-	defer list_lock.RUnlock()
+	handle, ok := handler_list[_signal]
+	list_lock.RUnlock()
 
-	if handle, ok := handler_list[_signal]; ok && handle != nil {
+	if ok && handle != nil {
 		if GetRunModel() == Linear {
 			handle()
 		} else {
@@ -169,11 +170,15 @@ func DefaultHandle(_signal os.Signal) {
 	log.Info(_signal)
 }
 
-func Exit() {
+func Exit(code int) {
 	log.Info("Exit")
 
 	signal.Stop(signal_channel)
-	os.Exit(0)
+	exit_channel <- code
+}
+
+func GetExit() chan int {
+	return exit_channel
 }
 
 func GetExitCode() int {
