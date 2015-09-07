@@ -60,6 +60,7 @@ const (
 )
 
 type Handler func()
+type DefaultHandler func(os.Signal)
 
 var signal_buff_size = 0
 
@@ -73,6 +74,9 @@ var list_lock = &sync.RWMutex{}
 
 var run_model int = Linear
 var run_model_lock = &sync.RWMutex{}
+
+var defaultHandler DefaultHandler = DefaultHandle
+var defaultHandlerLock = &sync.RWMutex{}
 
 func init() {
 	log.Info("init")
@@ -152,7 +156,20 @@ func Handle(_signal os.Signal) {
 		return
 	}
 
-	DefaultHandle(_signal)
+	if GetRunModel() == Linear {
+		if defaultHandler != nil {
+			defaultHandler(_signal)
+		} else {
+			DefaultHandle(_signal)
+		}
+	} else {
+		if defaultHandler != nil {
+			go defaultHandler(_signal)
+		} else {
+			go DefaultHandle(_signal)
+		}
+	}
+
 }
 
 func SetHandle(_signal os.Signal, handle Handler) {
@@ -168,6 +185,20 @@ func DefaultHandle(_signal os.Signal) {
 	log.Info("DefaultHandle")
 
 	log.Info(_signal)
+}
+
+func SetDefaultHandle(handle DefaultHandler) {
+	defaultHandlerLock.Lock()
+	defer defaultHandlerLock.Unlock()
+
+	defaultHandler = handle
+}
+
+func ClearDefaultHandle() {
+	defaultHandlerLock.Lock()
+	defer defaultHandlerLock.Unlock()
+
+	defaultHandler = DefaultHandle
 }
 
 func Exit(code int) {
