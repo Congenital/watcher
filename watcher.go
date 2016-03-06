@@ -62,31 +62,53 @@ const (
 type Handler func()
 type DefaultHandler func(os.Signal)
 
-var signal_buff_size = 0
+type Watcher struct {
+	signal_buff_size int
 
-var signal_channel chan os.Signal
-var signal_buff_size_lock = &sync.RWMutex{}
+	signal_channel        chan os.Signal
+	signal_buff_size_lock *sync.RWMutex
 
-var exit_channel = make(chan int)
+	exit_channel chan int
 
-var handler_list = make(map[os.Signal]Handler)
-var list_lock = &sync.RWMutex{}
+	handler_list map[os.Signal]Handler
+	list_lock    *sync.RWMutex
 
-var run_model int = Linear
-var run_model_lock = &sync.RWMutex{}
+	run_model      int
+	run_model_lock *sync.RWMutex
 
-var defaultHandler DefaultHandler = DefaultHandle
-var defaultHandlerLock = &sync.RWMutex{}
+	defaultHandler     DefaultHandler
+	defaultHandlerLock *sync.RWMutex
+}
+
+func NewWatcher() *Watcher {
+	return &Watcher{
+		signal_buff_size: 0,
+
+		signal_channel:        make(chan os.Signal),
+		signal_buff_size_lock: &sync.RWMutex{},
+
+		exit_channel: make(chan int),
+
+		handler_list: make(map[os.Signal]Handler),
+		list_lock:    &sync.RWMutex{},
+
+		run_model:      Linear,
+		run_model_lock: &sync.RWMutex{},
+
+		defaultHandler:     DefaultHandle,
+		defaultHandlerLock: &sync.RWMutex{},
+	}
+}
 
 func init() {
 	log.Info("init")
 }
 
-func Listen() {
+func (this *Watcher) Listen() {
 	log.Info("Listen")
-	signal_channel = make(chan os.Signal, signal_buff_size)
+	this.signal_channel = make(chan os.Signal, this.signal_buff_size)
 
-	signal.Notify(signal_channel,
+	signal.Notify(this.signal_channel,
 		syscall.SIGHUP,  /*终端的挂断或进程死亡*/
 		syscall.SIGINT,  /*来自键盘的中断信号*/
 		syscall.SIGQUIT, /*来自键盘的离开信号*/
@@ -127,28 +149,28 @@ func Listen() {
 		syscall.SIGUNUSED, /*未使用信号(will be SIGSYS)*/
 	)
 
-	go Switch()
+	go this.Switch()
 }
 
-func Switch() {
+func (this *Watcher) Switch() {
 	log.Info("Switch")
 
 	for {
-		signal_value := <-signal_channel
+		signal_value := <-this.signal_channel
 		log.Info(signal_value)
-		Handle(signal_value)
+		this.Handle(signal_value)
 	}
 }
 
-func Handle(_signal os.Signal) {
+func (this *Watcher) Handle(_signal os.Signal) {
 	log.Info("Handle")
 
-	list_lock.RLock()
-	handle, ok := handler_list[_signal]
-	list_lock.RUnlock()
+	this.list_lock.RLock()
+	handle, ok := this.handler_list[_signal]
+	this.list_lock.RUnlock()
 
 	if ok && handle != nil {
-		if GetRunModel() == Linear {
+		if this.GetRunModel() == Linear {
 			handle()
 		} else {
 			go handle()
@@ -156,15 +178,15 @@ func Handle(_signal os.Signal) {
 		return
 	}
 
-	if GetRunModel() == Linear {
-		if defaultHandler != nil {
-			defaultHandler(_signal)
+	if this.GetRunModel() == Linear {
+		if this.defaultHandler != nil {
+			this.defaultHandler(_signal)
 		} else {
 			DefaultHandle(_signal)
 		}
 	} else {
-		if defaultHandler != nil {
-			go defaultHandler(_signal)
+		if this.defaultHandler != nil {
+			go this.defaultHandler(_signal)
 		} else {
 			go DefaultHandle(_signal)
 		}
@@ -172,13 +194,13 @@ func Handle(_signal os.Signal) {
 
 }
 
-func SetHandle(_signal os.Signal, handle Handler) {
+func (this *Watcher) SetHandle(_signal os.Signal, handle Handler) {
 	log.Info("SetHandle")
 
-	list_lock.Lock()
-	defer list_lock.Unlock()
+	this.list_lock.Lock()
+	defer this.list_lock.Unlock()
 
-	handler_list[_signal] = handle
+	this.handler_list[_signal] = handle
 }
 
 func DefaultHandle(_signal os.Signal) {
@@ -187,77 +209,77 @@ func DefaultHandle(_signal os.Signal) {
 	log.Info(_signal)
 }
 
-func SetDefaultHandle(handle DefaultHandler) {
-	defaultHandlerLock.Lock()
-	defer defaultHandlerLock.Unlock()
+func (this *Watcher) SetDefaultHandle(handle DefaultHandler) {
+	this.defaultHandlerLock.Lock()
+	defer this.defaultHandlerLock.Unlock()
 
-	defaultHandler = handle
+	this.defaultHandler = handle
 }
 
-func ClearDefaultHandle() {
-	defaultHandlerLock.Lock()
-	defer defaultHandlerLock.Unlock()
+func (this *Watcher) ClearDefaultHandle() {
+	this.defaultHandlerLock.Lock()
+	defer this.defaultHandlerLock.Unlock()
 
-	defaultHandler = DefaultHandle
+	this.defaultHandler = DefaultHandle
 }
 
-func Exit(code int) {
+func (this *Watcher) Exit(code int) {
 	log.Info("Exit")
 
-	signal.Stop(signal_channel)
-	exit_channel <- code
+	signal.Stop(this.signal_channel)
+	this.exit_channel <- code
 }
 
-func GetExit() chan int {
-	return exit_channel
+func (this *Watcher) GetExit() chan int {
+	return this.exit_channel
 }
 
-func GetExitCode() int {
+func (this *Watcher) GetExitCode() int {
 	log.Info("GetExit")
 
-	return <-exit_channel
+	return <-this.exit_channel
 }
 
-func Stop() {
+func (this *Watcher) Stop() {
 	log.Info("Stop")
 
-	signal.Stop(signal_channel)
+	signal.Stop(this.signal_channel)
 }
 
-func SetRunModel(model int) {
-	run_model_lock.Lock()
-	defer run_model_lock.Unlock()
+func (this *Watcher) SetRunModel(model int) {
+	this.run_model_lock.Lock()
+	defer this.run_model_lock.Unlock()
 
-	run_model = model
+	this.run_model = model
 }
 
-func GetRunModel() int {
-	run_model_lock.RLock()
-	defer run_model_lock.RUnlock()
+func (this *Watcher) GetRunModel() int {
+	this.run_model_lock.RLock()
+	defer this.run_model_lock.RUnlock()
 
-	return run_model
+	return this.run_model
 }
 
-func SetParallel() {
-	SetRunModel(Parallel)
+func (this *Watcher) SetParallel() {
+	this.SetRunModel(Parallel)
 }
 
-func SetLinear() {
-	SetRunModel(Linear)
+func (this *Watcher) SetLinear() {
+	this.SetRunModel(Linear)
 }
 
-func GetBuffSize() int {
-	signal_buff_size_lock.RLock()
-	defer signal_buff_size_lock.RUnlock()
+func (this *Watcher) GetBuffSize() int {
+	this.signal_buff_size_lock.RLock()
+	defer this.signal_buff_size_lock.RUnlock()
 
-	return signal_buff_size
+	return this.signal_buff_size
 }
 
-func SetBuffSize(size int) {
-	signal_buff_size_lock.Lock()
-	defer signal_buff_size_lock.Unlock()
+func (this *Watcher) SetBuffSize(size int) {
+	this.signal_buff_size_lock.Lock()
+	defer this.signal_buff_size_lock.Unlock()
 
-	signal_buff_size = size
+	this.signal_buff_size = size
 }
 
 func SendSignal(pid int, _signal os.Signal) {

@@ -17,24 +17,30 @@ func main() {
 			log.Info(runtime.NumGoroutine())
 		}
 	}()
+	w := watcher.NewWatcher()
 
-	watcher.SetBuffSize(10)
-	watcher.Listen()
+	w.SetBuffSize(10)
+	w.Listen()
 
-	watcher.SetHandle(syscall.SIGHUP, func() {
+	w.SetHandle(syscall.SIGHUP, func() {
 		log.Info("SIGHUP")
 	})
 
-	watcher.SetHandle(syscall.SIGINT, func() {
+	w.SetHandle(syscall.SIGINT, func() {
 		log.Info("SIGINT")
-		watcher.Exit(0)
+		w.Exit(0)
 	})
 
-	watcher.SetDefaultHandle(func(_signal os.Signal) {
+	w.SetHandle(syscall.SIGUSR1, func() {
+		log.Info("RESTART")
+		w.Exit(1)
+	})
+
+	w.SetDefaultHandle(func(_signal os.Signal) {
 		log.Info("Default ---", _signal)
-		watcher.ClearDefaultHandle()
+		w.ClearDefaultHandle()
 	})
 
-	watcher.GetExitCode()
+	w.GetExitCode()
 
 }
